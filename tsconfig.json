@@ -6,6 +6,8 @@
       "@/components/*": ["app/components/*"],
       "@/pages/*": ["pages/*"],
       "@/lib/*": ["app/lib/*"],
+      "@/types/*": ["app/lib/types*"],
+      "@/simplex/*": ["app/lib/simplex*"],
     },
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
