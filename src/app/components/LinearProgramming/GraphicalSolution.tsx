@@ -19,7 +19,6 @@ export const GraphicalSolution: React.FC<GraphicalSolutionProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
-  // Adapter la taille du canvas à son parent
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
@@ -47,69 +46,188 @@ export const GraphicalSolution: React.FC<GraphicalSolutionProps> = ({
   }, [solution, dimensions]);
 
   const calculateBounds = (solution: Solution) => {
+    let minX = 0;
+    let minY = 0;
     let maxX = Math.max(...solution.vertices.map(v => v.x), 10);
     let maxY = Math.max(...solution.vertices.map(v => v.y), 10);
     
     solution.constraints.forEach(c => {
       const [a, b] = c.coefficients;
       const rhs = c.rhs;
-      if (Math.abs(a) > 1e-10) maxX = Math.max(maxX, rhs / a);
-      if (Math.abs(b) > 1e-10) maxY = Math.max(maxY, rhs / b);
+      
+      if (Math.abs(a) > 1e-10) {
+        const xIntercept = rhs / a;
+        if (xIntercept < minX) minX = xIntercept;
+        if (xIntercept > maxX) maxX = xIntercept;
+      }
+      if (Math.abs(b) > 1e-10) {
+        const yIntercept = rhs / b;
+        if (yIntercept < minY) minY = yIntercept;
+        if (yIntercept > maxY) maxY = yIntercept;
+      }
     });
     
-    return { maxX: maxX * 1.2, maxY: maxY * 1.2 };
+    const rangeX = Math.max(Math.abs(maxX), Math.abs(minX), 10);
+    const rangeY = Math.max(Math.abs(maxY), Math.abs(minY), 10);
+    
+    return { 
+      minX: -rangeX * 0.25,
+      maxX: rangeX * 1.2,
+      minY: -rangeY * 0.25,
+      maxY: rangeY * 1.2
+    };
+  };
+
+  // Fonction pour formater les nombres proprement
+  const formatNumber = (num: number): string => {
+    if (Math.abs(num) < 0.01) return '0';
+    if (Math.abs(num) < 1) return num.toFixed(2);
+    return num.toFixed(1);
   };
 
   const drawGraph = (ctx: CanvasRenderingContext2D, solution: Solution) => {
     const { width: w, height: h } = dimensions;
-    const padding = 60;
+    const padding = 70;
     const graphWidth = w - 2 * padding;
     const graphHeight = h - 2 * padding;
-    const { maxX, maxY } = calculateBounds(solution);
+    const { minX, maxX, minY, maxY } = calculateBounds(solution);
     
-    const toX = (x: number) => padding + (x / maxX) * graphWidth;
-    const toY = (y: number) => h - padding - (y / maxY) * graphHeight;
+    const toX = (x: number) => padding + ((x - minX) / (maxX - minX)) * graphWidth;
+    const toY = (y: number) => padding + ((maxY - y) / (maxY - minY)) * graphHeight;
 
-    // Effacer
+    const originX = toX(0);
+    const originY = toY(0);
+
+    // Effacer avec un fond blanc propre
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#f8f9fa';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, w, h);
 
-    // Grille
+    // === LIGNES DES AXES PRINCIPAUX (épaisses et visibles) ===
     ctx.beginPath();
-    ctx.strokeStyle = '#dee2e6';
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= maxX; i += Math.ceil(maxX / 10)) {
-      ctx.moveTo(toX(i), padding);
-      ctx.lineTo(toX(i), h - padding);
-      ctx.stroke();
-      ctx.fillStyle = '#666';
-      ctx.font = '11px Arial';
-      ctx.fillText(i.toFixed(1), toX(i) - 5, h - padding + 20);
-    }
-    for (let i = 0; i <= maxY; i += Math.ceil(maxY / 10)) {
-      ctx.moveTo(padding, toY(i));
-      ctx.lineTo(w - padding, toY(i));
-      ctx.stroke();
-      ctx.fillStyle = '#666';
-      ctx.fillText(i.toFixed(1), padding - 25, toY(i) + 4);
-    }
-
-    // Axes
-    ctx.beginPath();
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2;
-    ctx.moveTo(padding, h - padding);
-    ctx.lineTo(w - padding, h - padding);
-    ctx.moveTo(padding, h - padding);
-    ctx.lineTo(padding, padding);
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 2.5;
+    // Axe X
+    ctx.moveTo(padding, originY);
+    ctx.lineTo(w - padding, originY);
+    // Axe Y
+    ctx.moveTo(originX, padding);
+    ctx.lineTo(originX, h - padding);
     ctx.stroke();
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 14px Arial';
-    ctx.fillText('X', w - padding + 5, h - padding + 5);
-    ctx.fillText('Y', padding - 10, padding - 5);
 
-    // Région réalisable
+    // Flèches des axes
+    ctx.fillStyle = '#1a1a2e';
+    // Flèche X (droite)
+    ctx.beginPath();
+    ctx.moveTo(w - padding - 12, originY - 5);
+    ctx.lineTo(w - padding, originY);
+    ctx.lineTo(w - padding - 12, originY + 5);
+    ctx.fill();
+    // Flèche Y (haut)
+    ctx.beginPath();
+    ctx.moveTo(originX - 5, padding + 12);
+    ctx.lineTo(originX, padding);
+    ctx.lineTo(originX + 5, padding + 12);
+    ctx.fill();
+
+    // Labels des axes
+    ctx.font = 'bold 15px "Inter", Arial, sans-serif';
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillText('x', w - padding + 8, originY + 5);
+    ctx.fillText('y', originX + 8, padding - 8);
+
+    // === GRILLE TRÈS LÉGÈRE (optionnelle, seulement quelques lignes) ===
+    ctx.beginPath();
+    ctx.strokeStyle = '#e8e8e8';
+    ctx.lineWidth = 0.5;
+    
+    // Seulement 5 lignes horizontales et 5 verticales maximum
+    const xTicks = Math.min(5, Math.ceil((maxX - minX) / 2));
+    const yTicks = Math.min(5, Math.ceil((maxY - minY) / 2));
+    
+    const xStep = (maxX - minX) / xTicks;
+    for (let i = 1; i <= xTicks; i++) {
+      const x = minX + i * xStep;
+      const xPos = toX(x);
+      if (xPos >= padding && xPos <= w - padding && Math.abs(x) > 0.01) {
+        ctx.moveTo(xPos, padding);
+        ctx.lineTo(xPos, h - padding);
+        ctx.stroke();
+      }
+    }
+    
+    const yStep = (maxY - minY) / yTicks;
+    for (let i = 1; i <= yTicks; i++) {
+      const y = minY + i * yStep;
+      const yPos = toY(y);
+      if (yPos >= padding && yPos <= h - padding && Math.abs(y) > 0.01) {
+        ctx.moveTo(padding, yPos);
+        ctx.lineTo(w - padding, yPos);
+        ctx.stroke();
+      }
+    }
+
+    // === TICS ET COORDONNÉES SUR LES AXES ===
+    ctx.font = '12px "Inter", Arial, sans-serif';
+    ctx.fillStyle = '#555';
+    
+    // Tics sur l'axe X (positifs et négatifs)
+    const xMarkers = [];
+    for (let x = Math.ceil(minX); x <= maxX; x += Math.ceil(maxX / 6)) {
+      if (Math.abs(x) > 0.01) xMarkers.push(x);
+    }
+    if (xMarkers.length === 0) xMarkers.push(maxX / 2);
+    
+    xMarkers.forEach(x => {
+      const xPos = toX(x);
+      if (xPos >= padding && xPos <= w - padding) {
+        // Petit tic
+        ctx.beginPath();
+        ctx.moveTo(xPos, originY - 5);
+        ctx.lineTo(xPos, originY + 5);
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // Valeur coordonnée
+        const formattedX = formatNumber(x);
+        const xOffset = formattedX.length * 3;
+        ctx.fillStyle = '#555';
+        ctx.fillText(formattedX, xPos - xOffset, originY + (x > 0 ? -8 : 18));
+      }
+    });
+    
+    // Tics sur l'axe Y (positifs et négatifs)
+    const yMarkers = [];
+    for (let y = Math.ceil(minY); y <= maxY; y += Math.ceil(maxY / 6)) {
+      if (Math.abs(y) > 0.01) yMarkers.push(y);
+    }
+    if (yMarkers.length === 0) yMarkers.push(maxY / 2);
+    
+    yMarkers.forEach(y => {
+      const yPos = toY(y);
+      if (yPos >= padding && yPos <= h - padding) {
+        // Petit tic
+        ctx.beginPath();
+        ctx.moveTo(originX - 5, yPos);
+        ctx.lineTo(originX + 5, yPos);
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // Valeur coordonnée
+        const formattedY = formatNumber(y);
+        ctx.fillStyle = '#555';
+        ctx.fillText(formattedY, originX - (y > 0 ? 28 : 32), yPos + 4);
+      }
+    });
+
+    // Valeur zéro à l'origine
+    ctx.fillStyle = '#1a1a2e';
+    ctx.font = 'bold 12px "Inter", Arial, sans-serif';
+    ctx.fillText('0', originX - 8, originY + (originY > h/2 ? -8 : 18));
+
+    // === CONTOURS DE LA RÉGION RÉALISABLE ===
     if (solution.feasibleRegion.length > 0) {
       ctx.beginPath();
       const region = solution.feasibleRegion[0];
@@ -118,15 +236,16 @@ export const GraphicalSolution: React.FC<GraphicalSolutionProps> = ({
         else ctx.lineTo(toX(p.x), toY(p.y));
       });
       ctx.closePath();
-      ctx.fillStyle = 'rgba(0, 150, 255, 0.2)';
+      ctx.fillStyle = 'rgba(52, 152, 219, 0.1)';
       ctx.fill();
-      ctx.strokeStyle = '#0066cc';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#3498db';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([]);
       ctx.stroke();
     }
 
-    // Dessiner TOUTES les contraintes
-    const colors = ['#dc3545', '#fd7e14', '#28a745', '#6f42c1', '#17a2b8', '#e83e8c'];
+    // === DROITES DES CONTRAINTES ===
+    const colors = ['#e74c3c', '#e67e22', '#27ae60', '#8e44ad', '#1abc9c', '#c0392b'];
     
     solution.constraints.forEach((constraint, idx) => {
       const [a, b] = constraint.coefficients;
@@ -135,138 +254,163 @@ export const GraphicalSolution: React.FC<GraphicalSolutionProps> = ({
       ctx.beginPath();
       ctx.strokeStyle = colors[idx % colors.length];
       ctx.lineWidth = 2;
-      ctx.setLineDash([8, 5]);
+      ctx.setLineDash([10, 6]);
       
-      let x1 = 0, y1, x2 = maxX, y2;
+      let points = [];
       
       if (Math.abs(b) > 1e-10) {
-        y1 = (c - a * x1) / b;
-        y2 = (c - a * x2) / b;
+        const x1 = minX;
+        const x2 = maxX;
+        const y1 = (c - a * x1) / b;
+        const y2 = (c - a * x2) / b;
         
-        if (y1 < 0) {
-          y1 = 0;
-          x1 = (c - b * y1) / a;
-        }
-        if (y2 < 0) {
-          y2 = 0;
-          x2 = (c - b * y2) / a;
-        }
-        if (y1 > maxY) {
-          y1 = maxY;
-          x1 = (c - b * y1) / a;
-        }
-        if (y2 > maxY) {
-          y2 = maxY;
-          x2 = (c - b * y2) / a;
-        }
+        if (y1 >= minY && y1 <= maxY) points.push({ x: x1, y: y1 });
+        if (y2 >= minY && y2 <= maxY) points.push({ x: x2, y: y2 });
         
-        if (x1 >= 0 && x1 <= maxX && y1 >= 0 && y1 <= maxY) {
-          ctx.moveTo(toX(x1), toY(y1));
-          ctx.lineTo(toX(x2), toY(y2));
+        const yMinIntersect = (c - a * ((c - b * minY) / a)) / b;
+        if (yMinIntersect >= minX && yMinIntersect <= maxX) {
+          points.push({ x: (c - b * minY) / a, y: minY });
+        }
+        const yMaxIntersect = (c - b * maxY) / a;
+        if (yMaxIntersect >= minX && yMaxIntersect <= maxX) {
+          points.push({ x: yMaxIntersect, y: maxY });
         }
       } else if (Math.abs(a) > 1e-10) {
         const x = c / a;
-        if (x >= 0 && x <= maxX) {
-          ctx.moveTo(toX(x), toY(0));
-          ctx.lineTo(toX(x), toY(maxY));
+        if (x >= minX && x <= maxX) {
+          points.push({ x, y: minY });
+          points.push({ x, y: maxY });
         }
       }
       
-      ctx.stroke();
-      ctx.setLineDash([]);
+      points = points.filter((p, i, arr) => 
+        i === arr.findIndex(p2 => Math.abs(p2.x - p.x) < 0.01 && Math.abs(p2.y - p.y) < 0.01)
+      );
       
-      // Afficher l'équation
-      let labelX, labelY;
-      if (Math.abs(b) > 1e-10) {
-        labelX = toX(maxX * 0.6);
-        labelY = toY((c - a * maxX * 0.6) / b);
-      } else {
-        labelX = toX(c / a);
-        labelY = toY(maxY * 0.8);
+      if (points.length >= 2) {
+        ctx.moveTo(toX(points[0].x), toY(points[0].y));
+        points.slice(1).forEach(p => ctx.lineTo(toX(p.x), toY(p.y)));
+        ctx.stroke();
       }
       
-      labelX = Math.min(Math.max(labelX, padding + 10), w - padding - 10);
-      labelY = Math.min(Math.max(labelY, padding + 20), h - padding - 10);
+      ctx.setLineDash([]);
       
+      // Légende de la contrainte
       const equation = `${a.toFixed(1)}x ${b >= 0 ? '+' : '-'} ${Math.abs(b).toFixed(1)}y ${constraint.operator} ${c.toFixed(1)}`;
-      ctx.font = '12px Arial';
+      ctx.font = '11px "Inter", Arial, sans-serif';
       ctx.fillStyle = colors[idx % colors.length];
+      ctx.shadowBlur = 0;
+      
+      let labelX = toX(maxX * 0.65);
+      let labelY = toY((c - a * maxX * 0.65) / b);
+      labelX = Math.min(Math.max(labelX, padding + 15), w - padding - 100);
+      labelY = Math.min(Math.max(labelY, padding + 25), h - padding - 15);
       ctx.fillText(equation, labelX, labelY);
     });
 
-    // Sommets
+    // === SOMMETS ===
     solution.vertices.forEach(vertex => {
+      const xPos = toX(vertex.x);
+      const yPos = toY(vertex.y);
+      
       ctx.beginPath();
-      ctx.fillStyle = '#ffc107';
-      ctx.arc(toX(vertex.x), toY(vertex.y), 6, 0, 2 * Math.PI);
+      ctx.fillStyle = '#f39c12';
+      ctx.arc(xPos, yPos, 6, 0, 2 * Math.PI);
       ctx.fill();
-      ctx.strokeStyle = '#856404';
+      ctx.strokeStyle = '#e67e22';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      ctx.fillStyle = '#666';
-      ctx.font = '10px Arial';
-      ctx.fillText(`(${vertex.x.toFixed(2)}, ${vertex.y.toFixed(2)})`, toX(vertex.x) + 8, toY(vertex.y) - 5);
+      
+      ctx.fillStyle = '#2c3e50';
+      ctx.font = '11px "Inter", Arial, sans-serif';
+      ctx.fillText(`(${formatNumber(vertex.x)}, ${formatNumber(vertex.y)})`, xPos + 8, yPos - 6);
     });
 
-    // Point optimal
+    // === POINT OPTIMAL (mis en évidence) ===
     if (solution.optimalPoint) {
       const optX = toX(solution.optimalPoint.x);
       const optY = toY(solution.optimalPoint.y);
       
+      // Cercle extérieur (halo)
       ctx.beginPath();
-      ctx.fillStyle = '#28a745';
-      ctx.arc(optX, optY, 9, 0, 2 * Math.PI);
+      ctx.fillStyle = '#2ecc71';
+      ctx.arc(optX, optY, 12, 0, 2 * Math.PI);
       ctx.fill();
       ctx.beginPath();
-      ctx.fillStyle = '#fff';
-      ctx.arc(optX, optY, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = '#ffffff';
+      ctx.arc(optX, optY, 5, 0, 2 * Math.PI);
       ctx.fill();
       
-      ctx.font = 'bold 13px Arial';
-      ctx.fillStyle = '#000';
+      // Lignes de projection vers les axes (discrètes)
+      ctx.beginPath();
+      ctx.setLineDash([4, 6]);
+      ctx.strokeStyle = '#2ecc71';
+      ctx.lineWidth = 1.2;
+      ctx.moveTo(optX, originY);
+      ctx.lineTo(optX, optY);
+      ctx.lineTo(originX, optY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Label du point optimal
+      ctx.font = 'bold 12px "Inter", Arial, sans-serif';
+      ctx.fillStyle = '#27ae60';
+      ctx.shadowBlur = 0;
       ctx.fillText(
-        `Optimal: (${solution.optimalPoint.x.toFixed(2)}, ${solution.optimalPoint.y.toFixed(2)}) = ${solution.optimalValue?.toFixed(2)}`,
-        optX + 12,
-        optY - 10
+        `★ Optimal (${formatNumber(solution.optimalPoint.x)}, ${formatNumber(solution.optimalPoint.y)})`,
+        optX + 15,
+        optY - 12
+      );
+      
+      // Valeur de la fonction objectif
+      ctx.font = 'bold 11px "Inter", Arial, sans-serif';
+      ctx.fillStyle = '#1a7a37';
+      ctx.fillText(
+        `Z = ${solution.optimalValue?.toFixed(2)}`,
+        optX + 15,
+        optY
       );
     }
   };
 
   return (
     <div ref={containerRef} className="w-full p-4 bg-white rounded-xl shadow-lg text-black">
-      <h3 className="text-2xl font-bold mb-4 text-gray-800">📈 Solution Graphique</h3>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800">📈 Solution graphique</h3>
       
       <canvas
         ref={canvasRef}
         width={dimensions.width}
         height={dimensions.height}
-        className="border rounded-lg shadow-md w-full h-auto"
+        className="border border-gray-200 rounded-lg shadow-sm w-full h-auto bg-white"
         style={{ display: 'block' }}
       />
       
       <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-        <h4 className="font-bold text-lg mb-3 text-gray-800">📊 Résultats:</h4>
+        <h4 className="font-semibold text-md mb-3 text-gray-700">📊 Résultats</h4>
         {solution.isInfeasible ? (
           <p className="text-red-600">⚠️ Problème infaisable</p>
         ) : solution.isUnbounded ? (
           <p className="text-orange-600">⚠️ Problème non borné</p>
         ) : solution.optimalPoint ? (
-          <div className="space-y-2">
-            <div className="flex justify-between p-2 bg-white rounded">
-              <span className="font-medium">📍 Point optimal:</span>
-              <span className="text-green-700">({solution.optimalPoint.x.toFixed(4)}, {solution.optimalPoint.y.toFixed(4)})</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-2 bg-white rounded-lg border border-gray-100">
+              <span className="text-xs text-gray-500">Point optimal</span>
+              <p className="font-mono font-semibold text-green-700">
+                ({formatNumber(solution.optimalPoint.x)}, {formatNumber(solution.optimalPoint.y)})
+              </p>
             </div>
-            <div className="flex justify-between p-2 bg-white rounded">
-              <span className="font-medium">💎 Valeur optimale:</span>
-              <span className="text-blue-700 font-bold">{solution.optimalValue?.toFixed(4)}</span>
+            <div className="p-2 bg-white rounded-lg border border-gray-100">
+              <span className="text-xs text-gray-500">Valeur optimale Z</span>
+              <p className="font-mono font-bold text-blue-700">{solution.optimalValue?.toFixed(4)}</p>
             </div>
-            <div className="flex justify-between p-2 bg-white rounded">
-              <span className="font-medium">🎯 Type:</span>
-              <span className="text-purple-700">{solution.objectiveType === 'maximize' ? 'Maximisation' : 'Minimisation'}</span>
+            <div className="p-2 bg-white rounded-lg border border-gray-100">
+              <span className="text-xs text-gray-500">Type</span>
+              <p className="font-medium text-purple-700">{solution.objectiveType === 'maximize' ? 'Maximisation' : 'Minimisation'}</p>
             </div>
-            <p className="text-sm text-gray-600 mt-2">
-              ✅ {solution.vertices.length} sommets dans la région réalisable
-            </p>
+            <div className="p-2 bg-white rounded-lg border border-gray-100">
+              <span className="text-xs text-gray-500">Sommets</span>
+              <p className="font-medium text-gray-700">{solution.vertices.length}</p>
+            </div>
           </div>
         ) : null}
       </div>

@@ -25,7 +25,7 @@ export default function Header() {
             href="/" 
             className="text-2xl font-bold text-gray-800 hover:text-blue-600 transition-colors"
           >
-            MonPortfolio
+            Recherche opérationnelle
           </Link>
 
           {/* Desktop menu */}
